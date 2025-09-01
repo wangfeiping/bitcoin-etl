@@ -1,0 +1,19 @@
+FROM python:3.6
+LABEL maintainer="Evgeny Medvedev <evge.medvedev@gmail.com>"
+ENV PROJECT_DIR=bitcoin-etl
+
+RUN mkdir /$PROJECT_DIR
+WORKDIR /$PROJECT_DIR
+COPY . .
+
+# Download tini locally first (run this command before building)
+# wget https://github.com/krallin/tini/releases/download/v0.18.0/tini -O tini
+# chmod +x tini
+
+# Copy the locally downloaded tini
+COPY tini /tini
+RUN chmod +x /tini
+
+RUN pip install --upgrade pip && pip install -e /$PROJECT_DIR/[streaming]
+
+ENTRYPOINT ["/tini", "--", "python", "bitcoinetl"] 

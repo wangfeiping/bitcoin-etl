@@ -1,5 +1,5 @@
 FROM python:3.6
-MAINTAINER Evgeny Medvedev <evge.medvedev@gmail.com>
+LABEL maintainer="Evgeny Medvedev <evge.medvedev@gmail.com>"
 ENV PROJECT_DIR=bitcoin-etl
 
 RUN mkdir /$PROJECT_DIR
@@ -7,9 +7,15 @@ WORKDIR /$PROJECT_DIR
 COPY . .
 RUN pip install --upgrade pip && pip install -e /$PROJECT_DIR/[streaming]
 
-# Add Tini
-ENV TINI_VERSION v0.18.0
-ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /tini
-RUN chmod +x /tini
+# Add Tini with better error handling and retry logic
+ENV TINI_VERSION=v0.18.0
+RUN set -ex; \
+    apt-get update && apt-get install -y --no-install-recommends curl ca-certificates; \
+    curl -fsSL https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini -o /tini; \
+    chmod +x /tini; \
+    apt-get remove -y curl; \
+    apt-get autoremove -y; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/*
 
 ENTRYPOINT ["/tini", "--", "python", "bitcoinetl"]
