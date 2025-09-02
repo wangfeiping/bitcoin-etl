@@ -40,11 +40,18 @@ class CriptoboxItemExporter:
         # 检查是否为交易（字典格式）
         elif isinstance(item, dict) and 'hash' in item and 'inputs' in item and 'outputs' in item:
             self.logger.debug("检测到交易字典格式")
-            self._parse_transaction_dict(item)
+            # 在streaming模式下，单独的交易可能没有区块信息
+            # 尝试从交易数据中提取区块信息
+            block_height = item.get('block_number') or item.get('blockNumber') or item.get('block_number')
+            block_hash = item.get('block_hash') or item.get('blockHash') or item.get('block_hash')
+            self._parse_transaction_dict(item, block_height, block_hash)
         # 检查是否为交易（对象格式）
         elif hasattr(item, 'hash') and hasattr(item, 'inputs') and hasattr(item, 'outputs'):
             self.logger.debug("检测到交易对象格式")
-            self._parse_transaction_object(item)
+            # 尝试从交易对象中获取区块信息
+            block_height = getattr(item, 'block_number', None) or getattr(item, 'blockNumber', None)
+            block_hash = getattr(item, 'block_hash', None) or getattr(item, 'blockHash', None)
+            self._parse_transaction_object(item, block_height, block_hash)
         else:
             # 其他类型的项目，记录但不处理
             self.logger.debug(f"跳过未知类型的项目: {type(item)}")
@@ -145,10 +152,8 @@ class CriptoboxItemExporter:
             from_addr_str = ', '.join(from_addresses) if len(from_addresses) > 1 else from_addresses[0]
             to_addr_str = ', '.join(to_addresses) if len(to_addresses) > 1 else to_addresses[0]
             
-            # block_info = f"区块 {block_height} | 区块哈希: {block_hash[:16]}..." if block_height and block_hash else ""
-            
             self.logger.warning(
-                f"{block_height} from: {from_addr_str} to: {to_addr_str} hash: {tx_hash}"
+                f"{block_height} from: {from_addr_str} to: {to_addr_str} {tx_hash}"
             )
             
             return {
