@@ -24,6 +24,7 @@ import click
 
 from bitcoinetl.enumeration.chain import Chain
 from bitcoinetl.rpc.bitcoin_rpc import BitcoinRpc
+from bitcoinetl.rpc.request import RateLimiter
 
 from blockchainetl.logging_utils import logging_basic_config
 from blockchainetl.streaming.streaming_utils import configure_logging, configure_signals
@@ -50,9 +51,11 @@ logging_basic_config()
 @click.option('--log-file', default=None, type=str, help='Log file.')
 @click.option('--pid-file', default=None, type=str, help='pid file.')
 @click.option('--enrich', default=True, type=bool, help='Enable filling in transactions inputs fields.')
+@click.option('--request-per-second', default=0, type=float, 
+              help='Maximum number of RPC requests per second (0 means no limit).')
 def stream(last_synced_block_file, lag, provider_uri, output, start_block, chain=Chain.BITCOIN,
            period_seconds=10, batch_size=2, block_batch_size=10, max_workers=5, log_file=None, pid_file=None,
-           enrich=True):
+           enrich=True, request_per_second=0):
     """Streams all data types to console or Google Pub/Sub."""
     configure_logging(log_file)
     configure_signals()
@@ -61,8 +64,13 @@ def stream(last_synced_block_file, lag, provider_uri, output, start_block, chain
     from bitcoinetl.streaming.btc_streamer_adapter import BtcStreamerAdapter
     from blockchainetl.streaming.streamer import Streamer
 
+    # Create rate limiter if request_per_second is specified
+    rate_limiter = None
+    if request_per_second > 0:
+        rate_limiter = RateLimiter(request_per_second)
+
     streamer_adapter = BtcStreamerAdapter(
-        bitcoin_rpc=ThreadLocalProxy(lambda: BitcoinRpc(provider_uri)),
+        bitcoin_rpc=ThreadLocalProxy(lambda: BitcoinRpc(provider_uri, rate_limiter=rate_limiter)),
         item_exporter=get_item_exporter(output),
         chain=chain,
         batch_size=batch_size,

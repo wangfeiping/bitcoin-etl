@@ -17,20 +17,21 @@
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
 
 import decimal
 import json
 
-from bitcoinetl.rpc.request import make_post_request
+from bitcoinetl.rpc.request import make_post_request, make_post_request_with_rate_limit
 
 
 class BitcoinRpc:
 
-    def __init__(self, provider_uri, timeout=60):
+    def __init__(self, provider_uri, timeout=60, rate_limiter=None):
         self.provider_uri = provider_uri
         self.timeout = timeout
+        self.rate_limiter = rate_limiter
 
     def batch(self, commands):
         rpc_calls = []
@@ -39,11 +40,20 @@ class BitcoinRpc:
             rpc_calls.append({"jsonrpc": "2.0", "method": m, "params": command, "id": "1"})
         text = json.dumps(rpc_calls)
         request_data = text.encode('utf-8')
-        raw_response = make_post_request(
-            self.provider_uri,
-            request_data,
-            timeout=self.timeout
-        )
+        
+        if self.rate_limiter:
+            raw_response = make_post_request_with_rate_limit(
+                self.provider_uri,
+                request_data,
+                self.rate_limiter,
+                timeout=self.timeout
+            )
+        else:
+            raw_response = make_post_request(
+                self.provider_uri,
+                request_data,
+                timeout=self.timeout
+            )
 
         response = self._decode_rpc_response(raw_response)
 
