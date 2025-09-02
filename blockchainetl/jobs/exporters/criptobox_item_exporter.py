@@ -15,26 +15,74 @@ class CriptoboxItemExporter:
 
     def open(self):
         self.logger.info("开始解析转账交易...")
-        self.logger.info("=" * 80)
-        self.logger.info("转账交易日志格式:")
-        self.logger.info("区块高度 | 区块哈希 | 交易哈希 | 发送方地址 | 接收方地址")
-        self.logger.info("=" * 80)
 
     def export_items(self, items):
         for item in items:
             self.export_item(item)
 
     def export_item(self, item):
-        """导出单个项目，如果是区块则解析其中的转账交易"""
+        """导出单个项目，支持对象和字典两种格式"""
+        # 调试信息
+        self.logger.debug(f"收到项目类型: {type(item)}")
+        if hasattr(item, '__dict__'):
+            self.logger.debug(f"项目属性: {list(item.__dict__.keys())}")
+        elif isinstance(item, dict):
+            self.logger.debug(f"字典键: {list(item.keys())}")
+        
+        # 检查是否为区块（对象格式）
         if hasattr(item, 'transactions') and hasattr(item, 'number'):
-            # 这是一个区块对象
+            self.logger.debug("检测到区块对象格式")
             self._parse_block_transactions(item)
-        # else:
-        #     # 其他类型的项目，按原样输出
-        #     print(json.dumps(item, separators=(',', ':')))
+        # 检查是否为区块（字典格式）
+        elif isinstance(item, dict) and 'transactions' in item and 'number' in item:
+            self.logger.debug("检测到区块字典格式")
+            self._parse_block_dict_transactions(item)
+        # 检查是否为交易（字典格式）
+        elif isinstance(item, dict) and 'hash' in item and 'inputs' in item and 'outputs' in item:
+            self.logger.debug("检测到交易字典格式")
+            self._parse_transaction_dict(item)
+        # 检查是否为交易（对象格式）
+        elif hasattr(item, 'hash') and hasattr(item, 'inputs') and hasattr(item, 'outputs'):
+            self.logger.debug("检测到交易对象格式")
+            self._parse_transaction_object(item)
+        else:
+            # 其他类型的项目，记录但不处理
+            self.logger.debug(f"跳过未知类型的项目: {type(item)}")
+            if isinstance(item, dict):
+                self.logger.debug(f"项目内容: {json.dumps(item, separators=(',', ':'))}")
+
+    def _parse_block_dict_transactions(self, block_dict):
+        """解析字典格式的区块中的转账交易"""
+        block_height = block_dict.get('number', 'unknown')
+        block_hash = block_dict.get('hash', 'unknown')
+        block_timestamp = block_dict.get('timestamp', None)
+        
+        if block_timestamp:
+            timestamp_str = datetime.fromtimestamp(block_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            timestamp_str = 'unknown'
+        
+        self.stats['total_blocks'] += 1
+        transactions = block_dict.get('transactions', [])
+        self.stats['total_transactions'] += len(transactions)
+        
+        self.logger.info(f"处理区块 {block_height} (哈希: {block_hash[:16]}...) 时间: {timestamp_str}")
+        self.logger.info(f"区块包含 {len(transactions)} 笔交易")
+        
+        block_transfer_count = 0
+        
+        for tx in transactions:
+            transfer_info = self._parse_transaction_dict(tx, block_height, block_hash)
+            if transfer_info:
+                block_transfer_count += 1
+        
+        if block_transfer_count > 0:
+            self.logger.info(f"区块 {block_height}: 发现 {block_transfer_count} 笔转账交易")
+        
+        self.logger.info("-" * 80)
 
     def _parse_block_transactions(self, block):
-        """解析区块中的转账交易"""
+        """解析区块对象中的转账交易"""
         block_height = block.number
         block_hash = getattr(block, 'hash', 'unknown')
         block_timestamp = getattr(block, 'timestamp', None)
@@ -54,7 +102,7 @@ class CriptoboxItemExporter:
         block_transfer_count = 0
         
         for tx in transactions:
-            transfer_info = self._parse_transfer_transaction(tx, block_height, block_hash)
+            transfer_info = self._parse_transaction_object(tx, block_height, block_hash)
             if transfer_info:
                 block_transfer_count += 1
         
@@ -63,8 +111,58 @@ class CriptoboxItemExporter:
         
         self.logger.info("-" * 80)
 
-    def _parse_transfer_transaction(self, transaction, block_height, block_hash):
-        """解析单笔转账交易"""
+    def _parse_transaction_dict(self, transaction_dict, block_height=None, block_hash=None):
+        """解析字典格式的交易"""
+        tx_hash = transaction_dict.get('hash', 'unknown')
+        
+        # 跳过coinbase交易
+        if transaction_dict.get('is_coinbase', False):
+            self.stats['coinbase_transactions'] += 1
+            self.logger.debug(f"跳过coinbase交易: {tx_hash}")
+            return None
+        
+        # 获取输入地址（发送方）
+        from_addresses = []
+        inputs = transaction_dict.get('inputs', [])
+        for input_tx in inputs:
+            addresses = input_tx.get('addresses', [])
+            if addresses:
+                from_addresses.extend(addresses)
+        
+        # 获取输出地址（接收方）
+        to_addresses = []
+        outputs = transaction_dict.get('outputs', [])
+        for output in outputs:
+            addresses = output.get('addresses', [])
+            if addresses:
+                to_addresses.extend(addresses)
+        
+        # 如果是转账交易（有发送方和接收方地址）
+        if from_addresses and to_addresses:
+            self.stats['transfer_transactions'] += 1
+            
+            # 输出转账信息
+            from_addr_str = ', '.join(from_addresses) if len(from_addresses) > 1 else from_addresses[0]
+            to_addr_str = ', '.join(to_addresses) if len(to_addresses) > 1 else to_addresses[0]
+            
+            # block_info = f"区块 {block_height} | 区块哈希: {block_hash[:16]}..." if block_height and block_hash else ""
+            
+            self.logger.warning(
+                f"{block_height} from: {from_addr_str} to: {to_addr_str} hash: {tx_hash}"
+            )
+            
+            return {
+                'block_height': block_height,
+                'block_hash': block_hash,
+                'tx_hash': tx_hash,
+                'from_addresses': from_addresses,
+                'to_addresses': to_addresses
+            }
+        
+        return None
+
+    def _parse_transaction_object(self, transaction, block_height=None, block_hash=None):
+        """解析交易对象"""
         tx_hash = getattr(transaction, 'hash', 'unknown')
         
         # 跳过coinbase交易
@@ -96,9 +194,10 @@ class CriptoboxItemExporter:
             from_addr_str = ', '.join(from_addresses) if len(from_addresses) > 1 else from_addresses[0]
             to_addr_str = ', '.join(to_addresses) if len(to_addresses) > 1 else to_addresses[0]
             
+            block_info = f"区块 {block_height} | 区块哈希: {block_hash[:16]}..." if block_height and block_hash else ""
+            
             self.logger.info(
-                f"转账交易: 区块 {block_height} | "
-                f"区块哈希: {block_hash[:16]}... | "
+                f"转账交易: {block_info} | "
                 f"交易哈希: {tx_hash[:16]}... | "
                 f"发送方: {from_addr_str} | "
                 f"接收方: {to_addr_str}"
