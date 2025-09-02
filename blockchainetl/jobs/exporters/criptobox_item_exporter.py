@@ -136,32 +136,34 @@ class CriptoboxItemExporter:
             if addresses:
                 from_addresses.extend(addresses)
         
-        # 获取输出地址（接收方）
-        to_addresses = []
+        # 获取输出地址（接收方）和对应的vout_n
+        to_addresses_with_vout = []
         outputs = transaction_dict.get('outputs', [])
-        for output in outputs:
+        for i, output in enumerate(outputs):
             addresses = output.get('addresses', [])
             if addresses:
-                to_addresses.extend(addresses)
+                for address in addresses:
+                    to_addresses_with_vout.append((address, i))  # (地址, vout_n)
         
         # 如果是转账交易（有发送方和接收方地址）
-        if from_addresses and to_addresses:
+        if from_addresses and to_addresses_with_vout:
             self.stats['transfer_transactions'] += 1
             
             # 输出转账信息
             from_addr_str = ', '.join(from_addresses) if len(from_addresses) > 1 else from_addresses[0]
-            to_addr_str = ', '.join(to_addresses) if len(to_addresses) > 1 else to_addresses[0]
             
-            self.logger.warning(
-                f"{block_height} from: {from_addr_str} to: {to_addr_str} {tx_hash}"
-            )
+            # 为每个接收方地址输出对应的vout_n
+            for address, vout_n in to_addresses_with_vout:
+                self.logger.warning(
+                    f"{block_height} from: {from_addr_str} to: {address} vout_n: {vout_n} {tx_hash}"
+                )
             
             return {
                 'block_height': block_height,
                 'block_hash': block_hash,
                 'tx_hash': tx_hash,
                 'from_addresses': from_addresses,
-                'to_addresses': to_addresses
+                'to_addresses_with_vout': to_addresses_with_vout
             }
         
         return None
@@ -183,37 +185,40 @@ class CriptoboxItemExporter:
             if addresses:
                 from_addresses.extend(addresses)
         
-        # 获取输出地址（接收方）
-        to_addresses = []
+        # 获取输出地址（接收方）和对应的vout_n
+        to_addresses_with_vout = []
         outputs = getattr(transaction, 'outputs', [])
-        for output in outputs:
+        for i, output in enumerate(outputs):
             addresses = getattr(output, 'addresses', [])
             if addresses:
-                to_addresses.extend(addresses)
+                for address in addresses:
+                    to_addresses_with_vout.append((address, i))  # (地址, vout_n)
         
         # 如果是转账交易（有发送方和接收方地址）
-        if from_addresses and to_addresses:
+        if from_addresses and to_addresses_with_vout:
             self.stats['transfer_transactions'] += 1
             
             # 输出转账信息
             from_addr_str = ', '.join(from_addresses) if len(from_addresses) > 1 else from_addresses[0]
-            to_addr_str = ', '.join(to_addresses) if len(to_addresses) > 1 else to_addresses[0]
             
             block_info = f"区块 {block_height} | 区块哈希: {block_hash[:16]}..." if block_height and block_hash else ""
             
-            self.logger.info(
-                f"转账交易: {block_info} | "
-                f"交易哈希: {tx_hash[:16]}... | "
-                f"发送方: {from_addr_str} | "
-                f"接收方: {to_addr_str}"
-            )
+            # 为每个接收方地址输出对应的vout_n
+            for address, vout_n in to_addresses_with_vout:
+                self.logger.info(
+                    f"转账交易: {block_info} | "
+                    f"交易哈希: {tx_hash[:16]}... | "
+                    f"发送方: {from_addr_str} | "
+                    f"接收方: {address} | "
+                    f"vout_n: {vout_n}"
+                )
             
             return {
                 'block_height': block_height,
                 'block_hash': block_hash,
                 'tx_hash': tx_hash,
                 'from_addresses': from_addresses,
-                'to_addresses': to_addresses
+                'to_addresses_with_vout': to_addresses_with_vout
             }
         
         return None
