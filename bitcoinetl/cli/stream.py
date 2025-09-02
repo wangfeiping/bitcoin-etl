@@ -30,6 +30,8 @@ from blockchainetl.logging_utils import logging_basic_config
 from blockchainetl.streaming.streaming_utils import configure_logging, configure_signals
 from blockchainetl.thread_local_proxy import ThreadLocalProxy
 
+from blockchainetl.jobs.exporters.criptobox_item_exporter import CriptoboxItemExporter
+
 logging_basic_config()
 
 
@@ -71,7 +73,8 @@ def stream(last_synced_block_file, lag, provider_uri, output, start_block, chain
 
     streamer_adapter = BtcStreamerAdapter(
         bitcoin_rpc=ThreadLocalProxy(lambda: BitcoinRpc(provider_uri, rate_limiter=rate_limiter)),
-        item_exporter=get_item_exporter(output),
+        # item_exporter=get_item_exporter(output),
+        item_exporter=CriptoboxItemExporter(),
         chain=chain,
         batch_size=batch_size,
         enable_enrich=enrich,
