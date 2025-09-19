@@ -1,5 +1,6 @@
 import json
 import logging
+import requests
 from datetime import datetime
 
 
@@ -157,6 +158,10 @@ class CriptoboxItemExporter:
                 self.logger.warning(
                     f"{block_height} from: {from_addr_str} to: {address} vout_n: {vout_n} {tx_hash}"
                 )
+                addrs = [from_addr_str, address]
+                addrs = self._query_addrs(addrs)
+                if len(addrs) > 0:
+                    self.logger.warning(f"registered Tx: {tx_hash}")
             
             return {
                 'block_height': block_height,
@@ -222,6 +227,58 @@ class CriptoboxItemExporter:
             }
         
         return None
+
+    def _query_addrs(self, addresses, api_url="http://172.17.0.1:17004"):
+        """
+        查询地址信息
+        
+        Args:
+            addresses (list): 要查询的地址列表
+            api_url (str): API端点URL，默认为本地API
+            
+        Returns:
+            list: 返回API响应中的地址数组，如果出错返回空列表
+        """
+        api_url = api_url+"/api/v1/bitcoin/addresses"
+        try:
+            # 准备请求数据
+            payload = {"addresses": addresses}
+            headers = {
+                'accept': 'application/json',
+                'content-type': 'application/json'
+            }
+            
+            self.logger.debug(f"查询地址: {addresses}")
+            self.logger.debug(f"API URL: {api_url}")
+            
+            # 发送POST请求
+            response = requests.post(api_url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()  # 检查HTTP错误
+            
+            # 解析响应
+            result = response.json()
+            
+            # 检查API响应状态
+            if result.get('success', False) and result.get('error_code', -1) == 0:
+                addresses_result = result.get('result', [])
+                self.logger.info(f"成功查询到 {len(addresses_result)} 个地址")
+                self.logger.debug(f"查询结果: {addresses_result}")
+                return addresses_result
+            else:
+                error_msg = result.get('error_message', 'Unknown error')
+                error_desc = result.get('error_description', 'No description')
+                self.logger.error(f"API返回错误: {error_msg} - {error_desc}")
+                return []
+                
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"网络请求错误: {str(e)}")
+            return []
+        except json.JSONDecodeError as e:
+            self.logger.error(f"JSON解析错误: {str(e)}")
+            return []
+        except Exception as e:
+            self.logger.error(f"查询地址时发生未知错误: {str(e)}")
+            return []
 
     def close(self):
         """关闭导出器并显示统计信息"""
