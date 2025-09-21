@@ -156,13 +156,15 @@ class CriptoboxItemExporter:
             
             # 为每个接收方地址输出对应的vout_n
             for address, vout_n in to_addresses_with_vout:
+                # register to criptobox
                 addrs = [from_addr_str, address]
                 addrs = self._query_addrs(addrs)
                 if len(addrs) > 0:
                     # self.logger.warning(f"registered Tx: {tx_hash}")
                     self._register_tx_mag(tx_hash)
                     self.logger.warning(
-                        f"{block_height} from: {from_addr_str} to: {address} vout_n: {vout_n} {tx_hash}"
+                        f"{block_height} from: {from_addr_str} to: {address}"
+                        f" vout_n: {vout_n} {tx_hash}"
                     )
             
             return {
@@ -174,6 +176,17 @@ class CriptoboxItemExporter:
             }
         
         return None
+
+    def close(self):
+        """关闭导出器并显示统计信息"""
+        self.logger.info("=" * 80)
+        self.logger.info("解析完成统计:")
+        self.logger.info(f"总处理区块数: {self.stats['total_blocks']}")
+        self.logger.info(f"总交易数: {self.stats['total_transactions']}")
+        self.logger.info(f"转账交易数: {self.stats['transfer_transactions']}")
+        self.logger.info(f"Coinbase交易数: {self.stats['coinbase_transactions']}")
+        self.logger.info("=" * 80)
+        self.logger.info("转账交易解析完成")
 
     def _parse_transaction_object(self, transaction, block_height=None, block_hash=None):
         """解析交易对象"""
@@ -333,13 +346,3 @@ class CriptoboxItemExporter:
             except Exception as e:
                 self.logger.error(f"criptobox API: register tx message exception: {str(e)}")
 
-    def close(self):
-        """关闭导出器并显示统计信息"""
-        self.logger.info("=" * 80)
-        self.logger.info("解析完成统计:")
-        self.logger.info(f"总处理区块数: {self.stats['total_blocks']}")
-        self.logger.info(f"总交易数: {self.stats['total_transactions']}")
-        self.logger.info(f"转账交易数: {self.stats['transfer_transactions']}")
-        self.logger.info(f"Coinbase交易数: {self.stats['coinbase_transactions']}")
-        self.logger.info("=" * 80)
-        self.logger.info("转账交易解析完成")
